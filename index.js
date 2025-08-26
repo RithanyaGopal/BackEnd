@@ -109,7 +109,7 @@ app.delete('/deleteStudent', async (req, res) => {
     try {
         const deleteStudent = await Student.findOneAndDelete({ rollNo });
         console.log(deleteStudent, rollNo);
-        if (deleteStudent) {    
+        if (deleteStudent) {
             res.send("Student Deleted");
         }
         else {
@@ -117,8 +117,25 @@ app.delete('/deleteStudent', async (req, res) => {
         }
     } catch (error) {
         res.send("Error deleting student");
-    }
+    }
 });
 
+app.put('/updateStudent', async (req, res) => {
+    const { rollNo, name, age, department } = req.body;
+    try {
+        const updatedStudent = await Student.findOneAndUpdate(
+            { rollNo },
+            { name, age, department },
+            { new: true }
+        );
+        if (updatedStudent) {
+            res.send("Student Updated");
+        } else {
+            res.status(404).send("Student not found");
+        }
+    } catch (error) {
+        res.status(500).send("Error updating student");
+    }
+});
 
 app.listen(3000);
