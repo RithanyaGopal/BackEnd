@@ -18,13 +18,14 @@ http.createServer((req, res) => {
 
 const express = require("express");
 const mongoose = require("mongoose");
+const jwt = require("jsonwebtoken");
 const app = express();
 
 app.use(express.json());
 
 mongoose.connect("mongodb://127.0.0.1:27017/studentdb")
-    .then(() => console.log("connected to db"))
-    .catch((err) => console.log("DB Connection error", err));
+    .then(() => console.log("MongoDB connected"))
+    .catch(err => console.log("DB Connection Error:", err));
 
 const studentSchema = new mongoose.Schema({
     name: String,
@@ -34,105 +35,91 @@ const studentSchema = new mongoose.Schema({
 });
 const Student = mongoose.model("Student", studentSchema);
 
-app.post("/insert", middleware,insertData );
-
-function middleware(req,res,next){
-    let reqdata = req.body;
-    if(reqdata.rollNo && reqdata.age && reqdata.department && reqdata.name) {
+function verifyToken(req, res, next) {
+    let token = req.body.token;
+    if (!token) return res.send("No token provided");
+    jwt.verify(token, "SECRETKEY", (err, decoded) => {
+        if (err) return res.send("Invalid token");
+        console.log(decoded);
         next();
-    }
-    else {
-        res.send("Missing required params")
+    });
+}
+
+async function login(req, res) {
+    let { username, password } = req.body;
+    if (username == "admin" && password == "admin@123") {
+        let token = jwt.sign({ username }, "SECRETKEY", { expiresIn: '1h' });
+        res.send(token);
+    } else {
+        res.status(401).send("Invalid credentials");
     }
 }
 
-async function insertData(req, res) {
+async function insertStudent(req, res) {
     const { name, age, department, rollNo } = req.body;
-
-    const newStudent = new Student({ name, age, department, rollNo, });
-
+    const newStudent = new Student({ name, age, department, rollNo });
     try {
         await newStudent.save();
         res.status(201).send("Student inserted");
     } catch (error) {
-        res.status(400).send("Error saving student");
+        res.status(400).send("Error inserting student");
     }
-};
+}
 
-app.get('/getAllStudents', async (req, res) => {
+async function getAllStudents(req, res) {
     try {
         const data = await Student.find();
         res.send(data);
-    }
-    catch (error) {
+    } catch (error) {
         res.status(500).send("Error fetching students");
     }
-});
+}
 
-app.get('/getStudentByParams/:rollNo', async (req, res) => {
+async function getStudentByRollNo(req, res) {
+    try {
+        const { rollNo } = req.body;
+        const data = await Student.findOne({ rollNo });
+        if (data) res.send(data);
+        else res.status(404).send("Student not found");
+    } catch (error) {
+        res.status(500).send("Error fetching student");
+    }
+}
+
+async function getStudentByParams(req, res) {
     try {
         const { rollNo } = req.params;
-        const data = await Student.findOne({ rollNo })
-        if (data) {
-            res.send(data);
-        } else {
-            res.status(404).send("Student not found");
-        }
+        const data = await Student.findOne({ rollNo });
+        if (data) res.send(data);
+        else res.status(404).send("Student not found");
+    } catch (error) {
+        res.status(500).send("Error fetching student");
     }
-    catch (error) {
-        res.status(500).send("Error fetching students");
-    }
-});
+}
 
-
-app.get('/getStudentByQuery', async (req, res) => {
+async function getStudentByQuery(req, res) {
     try {
         const { rollNo } = req.query;
-        const data = await Student.findOne({ rollNo })
-        if (data) {
-            res.send(data);
-        } else {
-            res.status(404).send("Student not found");
-        }
+        const data = await Student.findOne({ rollNo });
+        if (data) res.send(data);
+        else res.status(404).send("Student not found");
+    } catch (error) {
+        res.status(500).send("Error fetching student");
     }
-    catch (error) {
-        res.status(500).send("Error fetching students");
-    }
-});
+}
 
-app.delete('/deleteStudentByRollNo', async (req, res) => {
+async function deleteStudentByRollNo(req, res) {
     const { rollNo } = req.body;
     try {
-        const deletecount = await Student.deleteOne({ rollNo });
-        console.log(deletecount, rollNo);
-        if (deletecount.deletedCount > 0) {
-            res.send("Student Deleted");
-        } else {
-            res.status(404).send("Student not found");
-        }
-    } catch (error) {
-        res.send("Error deleting student");
+        const deletedStudent = await Student.findOneAndDelete({ rollNo });
+        if (deletedStudent) res.send("Student deleted");
+        else res.status(404).send("Student not found");
+    } catch (err) {
+        res.status(500).send("Error deleting student");
     }
-});
+}
 
-
-app.delete('/deleteStudent', async (req, res) => {
-    const { rollNo } = req.body;
-    try {
-        const deleteStudent = await Student.findOneAndDelete({ rollNo });
-        console.log(deleteStudent, rollNo);
-        if (deleteStudent) {
-            res.send("Student Deleted");
-        }
-        else {
-            res.status(404).send("Student not found");
-        }
-    } catch (error) {
-        res.send("Error deleting student");
-    }
-});
-
-app.put('/updateStudent', async (req, res) => {
+async function updateStudent(req, res) {
     const { rollNo, name, age, department } = req.body;
     try {
         const updatedStudent = await Student.findOneAndUpdate(
@@ -140,14 +127,20 @@ app.put('/updateStudent', async (req, res) => {
             { name, age, department },
             { new: true }
         );
-        if (updatedStudent) {
-            res.send("Student Updated");
-        } else {
-            res.status(404).send("Student not found");
-        }
+        if (updatedStudent) res.send("Student updated");
+        else res.status(404).send("Student not found");
     } catch (error) {
         res.status(500).send("Error updating student");
     }
-});
+}
 
-app.listen(3000);
+app.post('/login', login);
+app.post('/insert', verifyToken, insertStudent);
+app.get('/getAllStudents',verifyToken,  getAllStudents);
+app.get('/getStudentByRollNo', verifyToken, getStudentByRollNo);
+app.get('/getStudentbyParams/:rollNo', verifyToken, getStudentByParams);
+app.get('/getStudentbyQuery', verifyToken, getStudentByQuery);
+app.delete('/deleteStudentByRollNO', verifyToken, deleteStudentByRollNo);
+app.put('/updateStudent', verifyToken, updateStudent);
+
+app.listen(3000, () => console.log("Server running on port 3000"));

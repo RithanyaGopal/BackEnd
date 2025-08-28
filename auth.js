@@ -12,6 +12,8 @@ app.post('/login', (req,res) => {
         res.send(token);
     }
 });
+
+
 app.post('/verifylogin',(req,res)=>{
     let token = req.body.token
     if(!token) return res.send("No token provided");
@@ -20,5 +22,7 @@ app.post('/verifylogin',(req,res)=>{
         console.log(decoded)
         res.sendStatus(200)
     })
-})
+});
+
+
 app.listen(5000)
